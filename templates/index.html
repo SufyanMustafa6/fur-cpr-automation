@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FUR · CPR Automation</title>
+<style>
+  :root {
+    --brand:   #1C3557;
+    --accent:  #E8A020;
+    --green:   #1A7F4B;
+    --red:     #C0392B;
+    --amber:   #D4860A;
+    --bg:      #F5F4F0;
+    --card:    #FFFFFF;
+    --border:  #E0DDD5;
+    --text:    #1A1917;
+    --muted:   #6B6760;
+    --mono:    'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    background: var(--brand); color: #fff;
+    padding: 0 2rem; display: flex; align-items: center;
+    justify-content: space-between; height: 60px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  header .logo { display: flex; align-items: center; gap: 12px; }
+  header .logo svg { opacity: .9; }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+  header span { font-size: 12px; opacity: .65; font-weight: 400; }
+
+  /* ── Layout ── */
+  .container { max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1.5rem; margin-bottom: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card-title {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 1rem;
+  }
+
+  /* ── Token Input ── */
+  .token-row { display: flex; gap: 8px; }
+  .token-row input {
+    flex: 1; padding: 10px 14px; border: 1.5px solid var(--border);
+    border-radius: 7px; font-family: var(--mono); font-size: 13px;
+    background: #FAFAF8; outline: none; transition: border .15s;
+  }
+  .token-row input:focus { border-color: var(--brand); }
+  .token-row button {
+    padding: 0 14px; border: 1px solid var(--border); border-radius: 7px;
+    background: #F5F4F0; cursor: pointer; font-size: 13px; color: var(--muted);
+  }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .hint a { color: var(--brand); }
+
+  /* ── Upload Zone ── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 10px;
+    padding: 2rem; text-align: center; cursor: pointer;
+    transition: all .15s; background: #FAFAF8;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--brand); background: #EEF3FA; }
+  .upload-zone.done { border-color: var(--green); background: #F0FAF4; border-style: solid; }
+  .upload-zone .icon { font-size: 36px; display: block; margin-bottom: 8px; }
+  .upload-zone p  { font-size: 14px; color: var(--muted); }
+  .upload-zone strong { color: var(--text); font-size: 15px; }
+  #file-input { display: none; }
+
+  /* ── Preview Stats ── */
+  .stat-row { display: flex; gap: 10px; margin-top: 1rem; flex-wrap: wrap; }
+  .stat {
+    flex: 1; min-width: 120px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .stat .label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .stat .value { font-size: 22px; font-weight: 600; }
+  .stat.green .value { color: var(--green); }
+  .stat.amber .value { color: var(--amber); }
+  .stat.red   .value { color: var(--red); }
+  .stat.blue  .value { color: var(--brand); }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: 8px; margin-top: 1.25rem; flex-wrap: wrap; }
+  .btn {
+    padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px;
+    transition: opacity .15s, transform .1s;
+  }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: var(--brand); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #163049; }
+  .btn-green  { background: var(--green); color: #fff; }
+  .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-outline:hover { border-color: var(--brand); color: var(--brand); }
+
+  /* ── Progress ── */
+  .progress-wrap { margin-top: 1rem; }
+  .progress-label { display: flex; justify-content: space-between;
+                    font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .progress-bar-bg {
+    background: var(--bg); border-radius: 4px; height: 7px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-bar-fill {
+    height: 100%; background: var(--brand); border-radius: 4px;
+    transition: width .35s ease; width: 0%;
+  }
+  .progress-bar-fill.done { background: var(--green); }
+
+  /* ── Log ── */
+  .log-box {
+    background: #0F1923; border-radius: 8px; padding: 1rem;
+    max-height: 300px; overflow-y: auto; margin-top: 1rem;
+  }
+  .log-line {
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+    display: flex; gap: 8px;
+  }
+  .log-line.success { color: #4EC98B; }
+  .log-line.error   { color: #F07070; }
+  .log-line.warn    { color: #F0C060; }
+  .log-line.skip    { color: #A0A090; }
+  .log-line.info    { color: #8AAFC8; }
+  .log-order { margin-left: auto; opacity: .55; white-space: nowrap; }
+
+  /* ── Alert ── */
+  .alert {
+    padding: 12px 16px; border-radius: 8px; font-size: 13px;
+    margin-top: .75rem; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .alert.danger  { background: #FDECEA; border: 1px solid #F5C0BC; color: var(--red); }
+  .alert.warning { background: #FFF8E7; border: 1px solid #F5DFA0; color: var(--amber); }
+  .alert.success { background: #EAF7F0; border: 1px solid #9FDFC0; color: var(--green); }
+
+  /* ── Result Summary ── */
+  .result-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media(min-width: 540px) { .result-grid { grid-template-columns: repeat(4, 1fr); } }
+
+  /* ── History ── */
+  .history-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: var(--bg); border-radius: 8px;
+    border: 1px solid var(--border); margin-bottom: 8px; font-size: 13px;
+  }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.done  { background: #D4EFDF; color: var(--green); }
+  .badge.error { background: #FDECEA; color: var(--red); }
+
+  /* ── Steps guide ── */
+  .steps { display: flex; flex-direction: column; gap: 10px; }
+  .step  { display: flex; gap: 12px; align-items: flex-start; }
+  .step-num {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--brand);
+    color: #fff; font-size: 12px; font-weight: 700; display: flex;
+    align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .step-body strong { font-size: 13px; display: block; }
+  .step-body span   { font-size: 12px; color: var(--muted); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect width="28" height="28" rx="6" fill="white" fill-opacity=".15"/>
+      <path d="M7 8h14M7 14h9M7 20h12" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>CPR Automation <span>· FUR Store</span></h1>
+    </div>
+  </div>
+  <span style="font-size:12px;opacity:.5">Dragon Studios</span>
+</header>
+
+<div class="container">
+
+  <!-- Token Card -->
+  <div class="card" id="card-token">
+    <div class="card-title">🔑 Shopify Admin API Token</div>
+    <div class="token-row">
+      <input type="password" id="api-token" placeholder="shpat_xxxxxxxxxxxxxxxx" autocomplete="off">
+      <button onclick="toggleToken()" id="toggle-btn">Show</button>
+    </div>
+    <p class="hint">
+      Shopify Admin → Settings → Apps → Develop Apps → Your App → API Credentials → Admin API Access Token<br>
+      <strong>Required scope:</strong> write_orders, read_orders
+    </p>
+  </div>
+
+  <!-- Upload Card -->
+  <div class="card">
+    <div class="card-title">📄 Upload CPR File</div>
+    <div class="upload-zone" id="upload-zone"
+         onclick="document.getElementById('file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".pdf" onchange="handleFile(this.files[0])">
+      <span class="icon" id="upload-icon">📂</span>
+      <div id="upload-text">
+        <strong>Drop PostEx CPR PDF here</strong>
+        <p>or click to browse · PDF only</p>
+      </div>
+    </div>
+
+    <!-- Preview stats (hidden until file parsed) -->
+    <div id="preview-section" class="hidden">
+      <div class="stat-row">
+        <div class="stat blue">
+          <div class="label">CPR Number</div>
+          <div class="value" id="stat-cpr" style="font-size:16px">—</div>
+        </div>
+        <div class="stat green">
+          <div class="label">Delivered Orders</div>
+          <div class="value" id="stat-delivered">—</div>
+        </div>
+        <div class="stat amber">
+          <div class="label">Returned Orders</div>
+          <div class="value" id="stat-returned">—</div>
+        </div>
+        <div class="stat blue">
+          <div class="label">COD Collected</div>
+          <div class="value" id="stat-cod" style="font-size:16px">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-run" onclick="startJob()" disabled>
+      ▶ Run Automation
+    </button>
+    <button class="btn btn-outline" id="btn-reset" onclick="resetApp()" style="display:none">
+      ↺ New CPR
+    </button>
+    <button class="btn btn-green" id="btn-download" onclick="downloadReport()" style="display:none">
+      ⬇ Download Excel Report
+    </button>
+  </div>
+
+  <!-- Progress + Log (hidden until job starts) -->
+  <div class="card hidden" id="card-progress">
+    <div class="card-title">⚙ Processing</div>
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span id="progress-label">Starting...</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+    </div>
+    <div class="log-box" id="log-box"></div>
+  </div>
+
+  <!-- Results (hidden until done) -->
+  <div class="card hidden" id="card-results">
+    <div class="card-title">✅ Results</div>
+    <div class="result-grid">
+      <div class="stat green">
+        <div class="label">Marked PAID</div>
+        <div class="value" id="res-paid">—</div>
+      </div>
+      <div class="stat blue">
+        <div class="label">Total COD</div>
+        <div class="value" id="res-total" style="font-size:15px">—</div>
+      </div>
+      <div class="stat amber">
+        <div class="label">Skipped</div>
+        <div class="value" id="res-skipped">—</div>
+      </div>
+      <div class="stat green">
+        <div class="label">Returns OK</div>
+        <div class="value" id="res-returns">—</div>
+      </div>
+    </div>
+    <div id="alert-section"></div>
+  </div>
+
+  <!-- How it works -->
+  <div class="card" id="card-howto">
+    <div class="card-title">ℹ How It Works</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <strong>Enter API Token</strong>
+          <span>Your Shopify Admin API token with write_orders permission</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <strong>Upload CPR PDF</strong>
+          <span>PostEx / Call Courier payment receipt — system auto-extracts all tracking numbers</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <strong>Run Automation</strong>
+          <span>System fetches all Shopify orders, matches tracking numbers, marks delivered orders PAID, verifies returns are canceled</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <strong>Download Excel Report</strong>
+          <span>Full audit trail — paid, skipped, errors, returns — ready to share with accounts team</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let currentJobId = null;
+let pollTimer    = null;
+let cprData      = null;
+let currentToken = null;
+
+// ── Token toggle ────────────────────────────────────────────
+function toggleToken() {
+  const inp = document.getElementById('api-token');
+  const btn = document.getElementById('toggle-btn');
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
+  else                         { inp.type = 'password'; btn.textContent = 'Show'; }
+}
+
+// ── File handling ───────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+}
+
+async function handleFile(file) {
+  if (!file || !file.name.endsWith('.pdf')) {
+    alert('Only PDF files supported!');
+    return;
+  }
+
+  const zone = document.getElementById('upload-zone');
+  document.getElementById('upload-icon').textContent = '⏳';
+  document.getElementById('upload-text').innerHTML =
+    `<strong>Parsing ${file.name}…</strong><p>AI extracting tracking numbers</p>`;
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await resp.json();
+
+    if (!resp.ok || data.error) {
+      document.getElementById('upload-icon').textContent = '❌';
+      document.getElementById('upload-text').innerHTML =
+        `<strong style="color:#C0392B">Error: ${data.error}</strong>`;
+      return;
+    }
+
+    cprData = data._data;
+    zone.classList.add('done');
+    document.getElementById('upload-icon').textContent = '✅';
+    document.getElementById('upload-text').innerHTML =
+      `<strong>${file.name}</strong><p>${data.delivered} delivered · ${data.returned} returned</p>`;
+
+    // Show stats
+    document.getElementById('preview-section').classList.remove('hidden');
+    document.getElementById('stat-cpr').textContent       = data.cpr_number || '—';
+    document.getElementById('stat-delivered').textContent = data.delivered;
+    document.getElementById('stat-returned').textContent  = data.returned;
+    const cod = data.summary?.cod_collected
+      ? 'Rs ' + data.summary.cod_collected.toLocaleString('en-PK', {maximumFractionDigits:2})
+      : '—';
+    document.getElementById('stat-cod').textContent = cod;
+
+    checkRunnable();
+  } catch(e) {
+    document.getElementById('upload-icon').textContent = '❌';
+    document.getElementById('upload-text').innerHTML = `<strong>Network error</strong>`;
+  }
+}
+
+function checkRunnable() {
+  const token = document.getElementById('api-token').value.trim();
+  document.getElementById('btn-run').disabled = !(token && cprData);
+}
+document.getElementById('api-token').addEventListener('input', checkRunnable);
+
+// ── Start job ───────────────────────────────────────────────
+async function startJob() {
+  currentToken = document.getElementById('api-token').value.trim();
+  if (!currentToken || !cprData) return;
+
+  document.getElementById('btn-run').disabled = true;
+  document.getElementById('card-howto').classList.add('hidden');
+  document.getElementById('card-progress').classList.remove('hidden');
+  document.getElementById('card-results').classList.add('hidden');
+  document.getElementById('alert-section').innerHTML = '';
+  document.getElementById('log-box').innerHTML = '';
+
+  try {
+    const resp = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: currentToken, cpr_data: cprData })
+    });
+    const data = await resp.json();
+    if (data.error) { showError(data.error); return; }
+    currentJobId = data.job_id;
+    pollTimer = setInterval(pollStatus, 1000);
+  } catch(e) {
+    showError('Network error: ' + e.message);
+  }
+}
+
+// ── Poll status ─────────────────────────────────────────────
+let lastLogCount = 0;
+
+async function pollStatus() {
+  if (!currentJobId) return;
+  try {
+    const resp = await fetch(`/api/status/${currentJobId}`);
+    const data = await resp.json();
+
+    // Update progress bar
+    const pct = data.progress || 0;
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-pct').textContent = pct + '%';
+
+    const labels = {
+      queued:  'Queued…',
+      running: pct < 40 ? 'Fetching Shopify orders…'
+               : pct < 50 ? 'Verifying returns…'
+               : 'Marking orders as PAID…',
+      done:  '✅ Complete!',
+      error: '❌ Error'
+    };
+    document.getElementById('progress-label').textContent = labels[data.status] || '';
+    if (data.status === 'done')
+      document.getElementById('progress-bar').classList.add('done');
+
+    // Append new log lines
+    const box  = document.getElementById('log-box');
+    const logs = data.log || [];
+    for (let i = lastLogCount; i < logs.length; i++) {
+      const l   = logs[i];
+      const div = document.createElement('div');
+      div.className = 'log-line ' + (l.type || 'info');
+      const icon = { success:'✅', error:'❌', warn:'🔶', skip:'⚡', info:'·' };
+      div.innerHTML = `<span>${icon[l.type]||'·'}</span><span style="flex:1">${l.msg}</span>`
+        + (l.order ? `<span class="log-order">#${l.order}</span>` : '');
+      box.appendChild(div);
+    }
+    lastLogCount = logs.length;
+    box.scrollTop = box.scrollHeight;
+
+    if (data.status === 'done') {
+      clearInterval(pollTimer);
+      showResults(data);
+    } else if (data.status === 'error') {
+      clearInterval(pollTimer);
+      showError(data.error || 'Unknown error');
+    }
+  } catch(e) {}
+}
+
+// ── Show results ────────────────────────────────────────────
+function showResults(data) {
+  const s = data.summary || {};
+  document.getElementById('card-results').classList.remove('hidden');
+  document.getElementById('res-paid').textContent    = s.paid ?? '—';
+  document.getElementById('res-skipped').textContent = s.skipped ?? '—';
+  document.getElementById('res-returns').textContent = `${s.returns_voided ?? '—'}/${(s.returns_voided??0)+(s.returns_action??0)}`;
+
+  const total = s.paid_total
+    ? 'Rs ' + s.paid_total.toLocaleString('en-PK', {maximumFractionDigits:2})
+    : '—';
+  document.getElementById('res-total').textContent = total;
+
+  const alerts = document.getElementById('alert-section');
+  if (s.returns_action > 0 && data.returns_not_canceled) {
+    let html = `<div class="alert danger">⚠️ <div><strong>${s.returns_action} return order(s) NOT canceled in Shopify — please cancel manually:</strong><br>`;
+    data.returns_not_canceled.forEach(o => {
+      html += `<span style="font-family:monospace;font-size:12px">${o.tracking} → #${o.orderName} (${o.status})</span><br>`;
+    });
+    html += '</div></div>';
+    alerts.innerHTML += html;
+  }
+  if (s.errors > 0) {
+    alerts.innerHTML += `<div class="alert warning">⚡ ${s.errors} order(s) failed to mark as PAID — check the log above and retry manually in Shopify.</div>`;
+  }
+  if (s.paid > 0) {
+    alerts.innerHTML += `<div class="alert success">✅ ${s.paid} orders marked as PAID successfully · ${total} collected</div>`;
+  }
+
+  document.getElementById('btn-download').style.display = '';
+  document.getElementById('btn-reset').style.display    = '';
+}
+
+function showError(msg) {
+  document.getElementById('progress-label').textContent = 'Error';
+  document.getElementById('alert-section').innerHTML =
+    `<div class="alert danger" style="margin-top:1rem">❌ ${msg}</div>`;
+  document.getElementById('card-results').classList.remove('hidden');
+  document.getElementById('btn-reset').style.display = '';
+}
+
+// ── Download report ─────────────────────────────────────────
+function downloadReport() {
+  if (currentJobId) window.location = `/api/report/${currentJobId}`;
+}
+
+// ── Reset ───────────────────────────────────────────────────
+function resetApp() {
+  cprData      = null;
+  currentJobId = null;
+  lastLogCount = 0;
+  if (pollTimer) clearInterval(pollTimer);
+
+  document.getElementById('upload-zone').classList.remove('done');
+  document.getElementById('upload-icon').textContent = '📂';
+  document.getElementById('upload-text').innerHTML =
+    '<strong>Drop PostEx CPR PDF here</strong><p>or click to browse · PDF only</p>';
+  document.getElementById('preview-section').classList.add('hidden');
+  document.getElementById('card-progress').classList.add('hidden');
+  document.getElementById('card-results').classList.add('hidden');
+  document.getElementById('card-howto').classList.remove('hidden');
+  document.getElementById('btn-run').disabled      = true;
+  document.getElementById('btn-reset').style.display    = 'none';
+  document.getElementById('btn-download').style.display = 'none';
+  document.getElementById('log-box').innerHTML     = '';
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('progress-bar').classList.remove('done');
+  document.getElementById('alert-section').innerHTML = '';
+}
+</script>
+</body>
+</html>
