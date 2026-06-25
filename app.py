@@ -24,6 +24,45 @@ SHOPIFY_STORE = "furstores.myshopify.com"
 API_VERSION   = "2024-10"
 
 
+def get_access_token(credential):
+    """
+    Get Shopify access token.
+    Supports:
+    - shpat_xxx (legacy admin token) — use directly
+    - client_id|client_secret (new Dev Dashboard) — exchange for token
+    """
+    credential = credential.strip()
+    
+    # Legacy token — use directly
+    if credential.startswith("shpat_") or credential.startswith("atkn_"):
+        return credential, None
+    
+    # New Dev Dashboard: Client ID|Secret format
+    if "|" in credential:
+        parts = credential.split("|", 1)
+        client_id = parts[0].strip()
+        client_secret = parts[1].strip()
+        try:
+            resp = requests.post(
+                f"https://{SHOPIFY_STORE}/admin/oauth/access_token",
+                json={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "grant_type": "client_credentials"
+                },
+                timeout=15
+            )
+            data = resp.json()
+            if "access_token" in data:
+                return data["access_token"], None
+            return None, f"Token exchange failed: {data.get('error_description', str(data))}"
+        except Exception as e:
+            return None, f"Token exchange error: {e}"
+    
+    # Try as-is (might be a valid token we don't recognize)
+    return credential, None
+
+
 def shopify_gql(token, query, variables=None):
     """Safe Shopify GraphQL call — always returns a dict."""
     url = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/graphql.json"
@@ -182,6 +221,15 @@ def run_automation(job_id, token, cpr_data):
         job["log"].append({"type": t, "msg": msg, "order": order})
 
     try:
+        # Resolve token (supports shpat_ and client_id|secret)
+        resolved_token, token_err = get_access_token(token)
+        if token_err:
+            job["status"] = "error"
+            job["error"] = token_err
+            log(f"Token error: {token_err}", "error")
+            return
+        token = resolved_token
+        
         log("═══ PHASE 1: Fetching Shopify orders ═══")
         all_orders, err = fetch_shopify_orders(token, job_id)
         if err:
