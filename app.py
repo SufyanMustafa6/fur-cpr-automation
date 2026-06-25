@@ -24,15 +24,26 @@ API_VERSION = "2024-10"
 
 def shopify_graphql(token, query, variables=None):
     url = f"https://{SHOPIFY_STORE}/admin/api/{API_VERSION}/graphql.json"
-    resp = requests.post(url,
-        headers={
-            "Content-Type": "application/json",
-            "X-Shopify-Access-Token": token
-        },
-        json={"query": query, "variables": variables or {}},
-        timeout=30
-    )
-    return resp.json()
+    try:
+        resp = requests.post(url,
+            headers={
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": token
+            },
+            json={"query": query, "variables": variables or {}},
+            timeout=30
+        )
+        result = resp.json()
+        # Always return a dict
+        if not isinstance(result, dict):
+            return {"errors": [{"message": f"Unexpected response type: {type(result)}"}]}
+        return result
+    except requests.exceptions.Timeout:
+        return {"errors": [{"message": "Request timed out. Shopify API slow hai — dobara try karo."}]}
+    except requests.exceptions.ConnectionError:
+        return {"errors": [{"message": "Shopify se connect nahi ho saka. Token check karo."}]}
+    except Exception as e:
+        return {"errors": [{"message": str(e)}]}
 
 
 def parse_cpr_pdf(file_bytes):
@@ -113,7 +124,7 @@ def fetch_all_shopify_orders(token, job_id):
     page = 0
 
     query = """
-    query($after: String) {
+    query GetOrders($after: String) {
         orders(first: 50, after: $after, sortKey: CREATED_AT,
                query: "created_at:>=2026-05-01 created_at:<=2026-07-31") {
             pageInfo { hasNextPage endCursor }
@@ -129,30 +140,47 @@ def fetch_all_shopify_orders(token, job_id):
         variables = {"after": cursor} if cursor else {}
         data = shopify_graphql(token, query, variables)
 
+        # Check for API errors
+        if not isinstance(data, dict):
+            return None, f"Shopify ne unexpected response diya: {data}"
+
         if data.get("errors"):
-            return None, data["errors"][0].get("message", "Shopify API error")
+            err_msg = data["errors"][0].get("message", "Unknown Shopify error")
+            # Common error: invalid token
+            if "401" in str(err_msg) or "Unauthorized" in str(err_msg) or "Invalid API key" in str(err_msg):
+                return None, "Shopify token invalid hai. Nayi token banao aur dobara try karo."
+            return None, f"Shopify API error: {err_msg}"
 
-        orders_data = data.get("data", {}).get("orders", {})
-        if not orders_data:
-            return None, "No data returned from Shopify"
+        gql_data = data.get("data")
+        if not gql_data:
+            # Could be auth error without proper error field
+            ext = data.get("extensions", {})
+            return None, f"Shopify se data nahi aaya. Token check karo. Response: {str(data)[:200]}"
 
-        for edge in orders_data.get("edges", []):
-            node = edge["node"]
-            tracking = (node.get("fulfillments") or [{}])[0]
-            tracking = (tracking.get("trackingInfo") or [{}])[0]
-            tracking = tracking.get("number", "")
-            if tracking:
-                all_orders[tracking] = node
+        orders_obj = gql_data.get("orders", {})
+        if not orders_obj:
+            return None, "Orders field missing in response"
+
+        for edge in orders_obj.get("edges", []):
+            node = edge.get("node", {})
+            fulfillments = node.get("fulfillments") or []
+            if fulfillments:
+                tracking_list = fulfillments[0].get("trackingInfo") or []
+                if tracking_list:
+                    tracking_num = tracking_list[0].get("number", "")
+                    if tracking_num:
+                        all_orders[tracking_num] = node
 
         jobs[job_id]["progress"] = min(40, page * 6)
         jobs[job_id]["log"].append({
             "type": "info",
-            "msg":  f"Page {page}: {len(all_orders)} orders indexed"
+            "msg":  f"Page {page}: {len(all_orders)} orders indexed so far"
         })
 
-        if not orders_data["pageInfo"]["hasNextPage"]:
+        page_info = orders_obj.get("pageInfo", {})
+        if not page_info.get("hasNextPage"):
             break
-        cursor = orders_data["pageInfo"]["endCursor"]
+        cursor = page_info.get("endCursor")
         time.sleep(0.25)
 
     return all_orders, None
@@ -406,14 +434,24 @@ def upload_cpr():
 @app.route("/api/run", methods=["POST"])
 def run_job():
     """Start automation job."""
-    body = request.json or {}
-    token    = body.get("token", "").strip()
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+    except Exception:
+        body = {}
+
+    token    = (body.get("token") or "").strip()
     cpr_data = body.get("cpr_data")
 
     if not token:
         return jsonify({"error": "Shopify API token required"}), 400
     if not cpr_data:
         return jsonify({"error": "CPR data missing — upload a file first"}), 400
+
+    # Validate cpr_data structure
+    if not isinstance(cpr_data, dict):
+        return jsonify({"error": f"Invalid CPR data format: {type(cpr_data).__name__}"}), 400
+    if "delivered" not in cpr_data or "returned" not in cpr_data:
+        return jsonify({"error": "CPR data incomplete — please re-upload the PDF"}), 400
 
     job_id = f"job_{int(time.time()*1000)}"
     jobs[job_id] = {
