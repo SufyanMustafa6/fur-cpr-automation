@@ -33,8 +33,10 @@ def get_access_token(credential):
     """
     credential = credential.strip()
     
-    # Legacy token — use directly
-    if credential.startswith("shpat_") or credential.startswith("atkn_"):
+    # All known token formats — use directly
+    if (credential.startswith("shpat_") or 
+        credential.startswith("atkn_") or
+        len(credential) > 30):  # Any long token string, try directly
         return credential, None
     
     # New Dev Dashboard: Client ID|Secret format
