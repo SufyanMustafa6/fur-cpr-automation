@@ -78,10 +78,15 @@ def shopify_gql(token, query, variables=None):
             json={"query": query, "variables": variables or {}},
             timeout=30
         )
-        result = resp.json()
+        try:
+            result = resp.json()
+        except Exception:
+            return {"errors": [{"message": f"Shopify ne invalid response diya (status {resp.status_code}). Token check karo."}]}
+        
         if isinstance(result, dict):
             return result
-        return {"errors": [{"message": f"Non-dict response: {str(result)[:100]}"}]}
+        # Shopify returns a list when token is completely wrong
+        return {"errors": [{"message": f"Token invalid hai — 'atkn_' token kaam nahi karta. Shopify Admin se Custom App banao aur shpat_ token lo."}]}
     except Exception as e:
         return {"errors": [{"message": str(e)}]}
 
@@ -176,14 +181,15 @@ def fetch_shopify_orders(token, job_id):
         data = shopify_gql(token, q, {"after": cursor} if cursor else {})
 
         if data.get("errors"):
-            err0 = data["errors"][0]
-            if isinstance(err0, dict):
-                msg = err0.get("message", str(err0))
+            errs = data["errors"]
+            # Handle both list-of-dicts and list-of-strings
+            if errs and isinstance(errs[0], dict):
+                msg = errs[0].get("message", str(errs[0]))
+            elif errs:
+                msg = str(errs[0])
             else:
-                msg = str(err0)
-            if "401" in msg or "nvalid" in msg or "ccess" in msg:
-                return None, "Token galat hai — Shopify Admin se naya shpat_ token banao aur dobara try karo"
-            return None, f"Shopify error: {msg}"
+                msg = str(errs)
+            return None, f"Shopify API error: {msg} — Token check karo"
 
         gdata = data.get("data") or {}
         orders_obj = gdata.get("orders") or {}
