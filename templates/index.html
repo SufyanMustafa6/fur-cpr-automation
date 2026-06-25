@@ -335,7 +335,7 @@
 <script>
 let currentJobId = null;
 let pollTimer    = null;
-let cprData      = null;
+let uploadId     = null;
 let currentToken = null;
 
 // ── Token toggle ────────────────────────────────────────────
@@ -379,7 +379,7 @@ async function handleFile(file) {
       return;
     }
 
-    cprData = data._data;
+    uploadId = data.upload_id;
     zone.classList.add('done');
     document.getElementById('upload-icon').textContent = '✅';
     document.getElementById('upload-text').innerHTML =
@@ -404,14 +404,14 @@ async function handleFile(file) {
 
 function checkRunnable() {
   const token = document.getElementById('api-token').value.trim();
-  document.getElementById('btn-run').disabled = !(token && cprData);
+  document.getElementById("btn-run").disabled = !(token && uploadId);
 }
 document.getElementById('api-token').addEventListener('input', checkRunnable);
 
 // ── Start job ───────────────────────────────────────────────
 async function startJob() {
   currentToken = document.getElementById('api-token').value.trim();
-  if (!currentToken || !cprData) return;
+  if (!currentToken || !uploadId) return;
 
   document.getElementById('btn-run').disabled = true;
   document.getElementById('card-howto').classList.add('hidden');
@@ -424,7 +424,7 @@ async function startJob() {
     const resp = await fetch('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: currentToken, cpr_data: cprData })
+      body: JSON.stringify({ token: currentToken, upload_id: uploadId })
     });
     const data = await resp.json();
     if (data.error) { showError(data.error); return; }
@@ -534,7 +534,7 @@ function downloadReport() {
 
 // ── Reset ───────────────────────────────────────────────────
 function resetApp() {
-  cprData      = null;
+  uploadId     = null;
   currentJobId = null;
   lastLogCount = 0;
   if (pollTimer) clearInterval(pollTimer);
