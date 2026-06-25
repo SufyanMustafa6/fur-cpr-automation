@@ -1,4 +1,3 @@
-# FUR CPR Automation v3.1 - Build 1782419553
 """
 FUR CPR Automation System - Backend v3
 Dragon Studios for FUR Store (furstores.myshopify.com)
@@ -136,8 +135,14 @@ def fetch_shopify_orders(token, job_id):
         data = shopify_gql(token, q, {"after": cursor} if cursor else {})
 
         if data.get("errors"):
-            msg = data["errors"][0].get("message", "Unknown error")
-            return None, f"Shopify API error: {msg}"
+            err0 = data["errors"][0]
+            if isinstance(err0, dict):
+                msg = err0.get("message", str(err0))
+            else:
+                msg = str(err0)
+            if "401" in msg or "nvalid" in msg or "ccess" in msg:
+                return None, "Token galat hai — Shopify Admin se naya shpat_ token banao aur dobara try karo"
+            return None, f"Shopify error: {msg}"
 
         gdata = data.get("data") or {}
         orders_obj = gdata.get("orders") or {}
